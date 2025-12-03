@@ -1,19 +1,21 @@
 package app.model.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.UUID;
-
 @Getter @Setter
-public class UserViewDTO {
-    private UUID id;
-    private String email;
+public class UserProfileUpdateDTO {
+
+    @NotBlank
     private String firstName;
+
+    @NotBlank
     private String lastName;
+
     private String imageUrl;
+
     private String country;
+
     private String address;
-    private String role;
-    private String status;
 }
