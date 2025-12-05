@@ -3,7 +3,6 @@ package app.service;
 import app.model.dto.DoctorDetailsDTO;
 import app.model.dto.DoctorListViewDTO;
 import app.model.Doctor;
-import app.model.User;
 import app.repository.DoctorRepository;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;

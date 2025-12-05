@@ -29,6 +29,7 @@ public class Notification {
 
     private String message;
 
+    @Column(name = "is_read")
     private boolean read;
 
     private LocalDateTime createdOn = LocalDateTime.now();
