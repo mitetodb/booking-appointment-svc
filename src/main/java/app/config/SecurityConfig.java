@@ -1,5 +1,6 @@
 package app.config;
 
+import org.springframework.http.HttpMethod;
 import app.security.JwtAuthFilter;
 import app.security.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,7 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/doctors/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/doctor/**").hasRole("DOCTOR")
                 .requestMatchers("/api/assistant/**").hasRole("ASSISTANT")
