@@ -3,9 +3,10 @@ package app.service;
 import app.model.dto.DoctorDetailsDTO;
 import app.model.dto.DoctorListViewDTO;
 import app.model.Doctor;
+import app.model.dto.DoctorMeDTO;
+import app.model.enums.Specialty;
 import app.repository.DoctorRepository;
 import lombok.RequiredArgsConstructor;
-import org.modelmapper.ModelMapper;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +19,6 @@ import java.util.stream.Collectors;
 public class DoctorService {
 
     private final DoctorRepository doctorRepo;
-    private final ModelMapper mapper;
 
     public List<DoctorListViewDTO> getAllDoctors() {
         return doctorRepo.findAll().stream()
@@ -65,6 +65,30 @@ public class DoctorService {
 
         return doctorRepo.findByUserEmail(email)
                 .orElseThrow(() -> new RuntimeException("Doctor not found"));
+    }
+
+    public DoctorMeDTO getMyProfile() {
+        Doctor doctor = getCurrentDoctor();
+
+        DoctorMeDTO dto = new DoctorMeDTO();
+        dto.setId(doctor.getId());
+
+        Specialty s = Specialty.fromEnglishName(doctor.getSpecialty());
+        dto.setSpecialtyId(s != null ? s.getId() : null);
+
+        return dto;
+    }
+
+    public void updateMySpecialty(Integer specialtyId) {
+        if (specialtyId == null) {
+            throw new RuntimeException("specialtyId is required");
+        }
+
+        Specialty specialtyEnum = Specialty.fromId(specialtyId);
+
+        Doctor doctor = getCurrentDoctor();
+        doctor.setSpecialty(specialtyEnum.getEnglishName());
+        doctorRepo.save(doctor);
     }
 }
 

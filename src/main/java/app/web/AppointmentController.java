@@ -24,6 +24,14 @@ public class AppointmentController {
         return appointmentService.createAppointment(doctorId, req);
     }
 
+    @PutMapping("/{id}")
+    public AppointmentViewDTO edit(
+            @PathVariable UUID id,
+            @RequestBody CreateAppointmentRequest req
+    ) {
+        return appointmentService.editMyAppointment(id, req);
+    }
+
     @DeleteMapping("/{id}")
     public void cancel(@PathVariable UUID id) {
         appointmentService.cancelAppointment(id);

@@ -1,8 +1,8 @@
 package app.web;
 
-import app.model.dto.DoctorAppointmentDTO;
-import app.model.dto.UpdateWorkingHoursDTO;
+import app.model.dto.*;
 import app.service.DoctorScheduleService;
+import app.service.DoctorService;
 import app.service.DoctorWorkingHoursService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +19,17 @@ public class DoctorPanelController {
 
     private final DoctorScheduleService scheduleService;
     private final DoctorWorkingHoursService workingHoursService;
+    private final DoctorService doctorService;
+
+    @GetMapping("/me")
+    public DoctorMeDTO getMe() {
+        return doctorService.getMyProfile();
+    }
+
+    @PutMapping("/me/specialty")
+    public void updateMySpecialty(@RequestBody UpdateSpecialtyRequest request) {
+        doctorService.updateMySpecialty(request.getSpecialtyId());
+    }
 
     @GetMapping("/appointments")
     public List<DoctorAppointmentDTO> myAppointments() {
@@ -54,9 +65,21 @@ public class DoctorPanelController {
 
     @PutMapping("/working-hours")
     public void updateWorkingHours(
-            @RequestBody UpdateWorkingHoursDTO dto
+            @RequestBody List<WorkingHoursDTO> dtos
     ) {
-        workingHoursService.updateWorkingHours(dto);
+        workingHoursService.updateWorkingHours(dtos);
+    }
+
+    @GetMapping("/working-hours")
+    public List<WorkingHoursDTO> getWorkingHours() {
+        return workingHoursService.getMyWorkingHours();
+    }
+
+    @DeleteMapping("/working-hours/{dayOfWeek}")
+    public void deleteWorkingHours(
+            @PathVariable int dayOfWeek
+    ) {
+        workingHoursService.deleteWorkingHoursForDay(dayOfWeek);
     }
 }
 

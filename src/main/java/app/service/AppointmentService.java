@@ -109,6 +109,41 @@ public class AppointmentService {
         return dto;
     }
 
+    // update
+    public AppointmentViewDTO editMyAppointment(UUID id, CreateAppointmentRequest req) {
+
+        User user = getCurrentUser();
+
+        Appointment a = appointmentRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Appointment not found"));
+
+        if (!a.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Not allowed to modify this appointment");
+        }
+
+        LocalDateTime time = LocalDateTime.parse(req.getDateTime());
+
+        validateSlot(time);
+        validateDoctorAvailability(a.getDoctor(), time);
+        validateExistingConflicts(a.getDoctor(), time);
+
+        a.setDateTime(time);
+        a.setType(req.getType());
+        a.setPaymentType(req.getPaymentType());
+        appointmentRepo.save(a);
+
+        AppointmentViewDTO dto = new AppointmentViewDTO();
+        dto.setId(a.getId());
+        dto.setDoctorId(a.getDoctor().getId().toString());
+        dto.setDoctorName(a.getDoctor().getUser().getFirstName() + " " + a.getDoctor().getUser().getLastName());
+        dto.setDateTime(a.getDateTime().toString());
+        dto.setType(a.getType());
+        dto.setPaymentType(a.getPaymentType());
+        dto.setStatus(a.getStatus());
+
+        return dto;
+    }
+
     // --- Cancel ---
     public void cancelAppointment(UUID id) {
         User user = getCurrentUser();
