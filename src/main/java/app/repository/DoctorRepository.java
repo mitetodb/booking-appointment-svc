@@ -11,4 +11,6 @@ public interface DoctorRepository extends JpaRepository<Doctor, UUID> {
     List<Doctor> findAll();
 
     Optional<Doctor> findByUserEmail(String email);
+
+    Optional<Doctor> findByUserId(UUID id);
 }
