@@ -3,6 +3,8 @@ package app.service;
 import app.model.dto.AssistantAppointmentDTO;
 import app.model.dto.AssistantDoctorListDTO;
 import app.model.*;
+import app.model.dto.UserViewDTO;
+import app.model.enums.UserRole;
 import app.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,6 +25,7 @@ public class AssistantService {
     private final AppointmentRepository appointmentRepo;
     private final UserRepository userRepo;
 
+    // common helpers
     private User getCurrentAssistant() {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
@@ -30,6 +33,41 @@ public class AssistantService {
                 .orElseThrow(() -> new RuntimeException("Assistant user not found"));
     }
 
+    private void validateSlot(LocalDateTime time) {
+        int min = time.getMinute();
+        if (min % 20 != 0) {
+            throw new RuntimeException("Slots must be 20-minute intervals.");
+        }
+    }
+
+    private void validateDoctorSchedule(Doctor doctor, LocalDateTime time) {
+        int dow = time.getDayOfWeek().getValue(); // 1-7
+
+        var wh = doctor.getWorkingHours().stream()
+                .filter(x -> x.getDayOfWeek() == dow)
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Doctor not working this day"));
+
+        String slot = time.toLocalTime().toString().substring(0, 5);
+
+        if (slot.compareTo(wh.getStartTime()) < 0 || slot.compareTo(wh.getEndTime()) > 0) {
+            throw new RuntimeException("Slot outside working hours");
+        }
+    }
+
+    private void validateConflicts(Doctor doctor, LocalDateTime time) {
+        boolean conflict = appointmentRepo
+                .findByDoctorId(doctor.getId()).stream()
+                .anyMatch(a -> a.getDateTime()
+                        .truncatedTo(MINUTES)
+                        .equals(time.truncatedTo(MINUTES)));
+
+        if (conflict) {
+            throw new RuntimeException("Doctor already has appointment at this time");
+        }
+    }
+
+    // assistant assigned doctors
     public List<AssistantDoctorListDTO> getAssignedDoctors() {
 
         User assistant = getCurrentAssistant();
@@ -51,40 +89,7 @@ public class AssistantService {
                 .collect(Collectors.toList());
     }
 
-    private void validateSlot(LocalDateTime time) {
-        int min = time.getMinute();
-        if (min % 20 != 0) {
-            throw new RuntimeException("Slots must be 20-minute intervals.");
-        }
-    }
-
-    private void validateDoctorSchedule(Doctor doctor, LocalDateTime time) {
-        int dow = time.getDayOfWeek().getValue(); // 1-7
-
-        var wh = doctor.getWorkingHours().stream()
-                .filter(x -> x.getDayOfWeek() == dow)
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Doctor not working this day"));
-
-        String slot = time.toLocalTime().toString().substring(0,5);
-
-        if (slot.compareTo(wh.getStartTime()) < 0 || slot.compareTo(wh.getEndTime()) > 0) {
-            throw new RuntimeException("Slot outside working hours");
-        }
-    }
-
-    private void validateConflicts(Doctor doctor, LocalDateTime time) {
-        boolean conflict = appointmentRepo
-                .findByDoctorId(doctor.getId()).stream()
-                .anyMatch(a -> a.getDateTime()
-                        .truncatedTo(MINUTES)
-                        .equals(time.truncatedTo(MINUTES)));
-
-        if (conflict) {
-            throw new RuntimeException("Doctor already has appointment at this time");
-        }
-    }
-
+    // doctor appointments
     public List<AssistantAppointmentDTO> getDoctorAppointments(UUID doctorId) {
 
         User assistant = getCurrentAssistant();
@@ -106,11 +111,15 @@ public class AssistantService {
                     dto.setPaymentType(a.getPaymentType());
                     dto.setDateTime(a.getDateTime().toString());
                     dto.setPatientName(a.getUser().getFirstName() + " " + a.getUser().getLastName());
+                    // if AssistantAppointmentDTO has these fields, you can also set:
+                    // dto.setPatientId(a.getUser().getId());
+                    // dto.setStatus(a.getStatus());
                     return dto;
                 })
                 .toList();
     }
 
+    // create appointment
     public AssistantAppointmentDTO createAppointment(UUID doctorId, Map<String, Object> payload) {
 
         User assistant = getCurrentAssistant();
@@ -124,18 +133,44 @@ public class AssistantService {
                 .anyMatch(m -> m.getDoctor().getId().equals(doctorId));
         if (!allowed) throw new RuntimeException("Not allowed for this doctor");
 
+        // 1) Parse dateTime (assuming ISO-formatted string, e.g. "2025-12-31T10:20:00")
         LocalDateTime time = LocalDateTime.parse(payload.get("dateTime").toString());
-        String patientName = payload.get("patientName").toString();
+
+        // 2) Get patientId from payload (IMPORTANT)
+        Object patientIdObj = payload.get("patientId");
+        if (patientIdObj == null) {
+            throw new RuntimeException("patientId is required");
+        }
+
+        UUID patientId;
+        try {
+            patientId = UUID.fromString(patientIdObj.toString());
+        } catch (IllegalArgumentException ex) {
+            throw new RuntimeException("Invalid patientId format");
+        }
+
+        // 3) Load patient user
+        User patient = userRepo.findById(patientId)
+                .orElseThrow(() -> new RuntimeException("Patient not found"));
+
+        // optional: ensure this user is actually a patient
+        if (patient.getRole() != UserRole.USER) {
+            throw new RuntimeException("Selected user is not a patient");
+        }
+
+        // 4) Other fields
         String type = payload.get("type").toString();
         String paymentType = payload.get("paymentType").toString();
 
+        // 5) Validations
         validateSlot(time);
         validateDoctorSchedule(doctor, time);
         validateConflicts(doctor, time);
 
+        // 6) Create appointment FOR PATIENT, not assistant!
         Appointment a = new Appointment();
         a.setDoctor(doctor);
-        a.setUser(assistant);
+        a.setUser(patient);                 // <-- THIS IS THE KEY FIX
         a.setDateTime(time);
         a.setType(type);
         a.setPaymentType(paymentType);
@@ -143,16 +178,22 @@ public class AssistantService {
 
         appointmentRepo.save(a);
 
+        // 7) Build DTO
         AssistantAppointmentDTO dto = new AssistantAppointmentDTO();
         dto.setId(a.getId());
-        dto.setPatientName(patientName);
         dto.setType(type);
         dto.setPaymentType(paymentType);
         dto.setDateTime(time.toString());
+        dto.setPatientName(patient.getFirstName() + " " + patient.getLastName());
+        // if DTO supports it:
+        // dto.setPatientId(patient.getId());
+        // dto.setStatus(a.getStatus());
+        // dto.setDoctorId(doctor.getId());
 
         return dto;
     }
 
+    // edit/cancel appointment
     public AssistantAppointmentDTO editAppointment(UUID id, Map<String, Object> payload) {
 
         User assistant = getCurrentAssistant();
@@ -160,7 +201,7 @@ public class AssistantService {
         Appointment a = appointmentRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Appointment not found"));
 
-        // check ownership
+        // check ownership (assistant must be assigned to this doctor)
         boolean allowed = assistantDoctorRepo.findByAssistantId(assistant.getId())
                 .stream()
                 .anyMatch(m -> m.getDoctor().getId().equals(a.getDoctor().getId()));
@@ -208,5 +249,22 @@ public class AssistantService {
 
         a.setStatus("CANCELLED");
         appointmentRepo.save(a);
+    }
+
+    // patient list
+    public List<UserViewDTO> getAllPatients() {
+        return userRepo.findAll().stream()
+                .filter(u -> u.getRole() == UserRole.USER)
+                .map(this::toUserViewDTO)
+                .toList();
+    }
+
+    private UserViewDTO toUserViewDTO(User u) {
+        UserViewDTO dto = new UserViewDTO();
+        dto.setId(u.getId());
+        dto.setFirstName(u.getFirstName());
+        dto.setLastName(u.getLastName());
+        dto.setEmail(u.getEmail());
+        return dto;
     }
 }

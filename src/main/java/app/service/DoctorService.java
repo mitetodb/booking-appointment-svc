@@ -1,11 +1,17 @@
 package app.service;
 
+import app.model.AssistantDoctor;
+import app.model.User;
+import app.model.dto.AssistantListItemDTO;
 import app.model.dto.DoctorDetailsDTO;
 import app.model.dto.DoctorListViewDTO;
 import app.model.Doctor;
 import app.model.dto.DoctorMeDTO;
 import app.model.enums.Specialty;
+import app.model.enums.UserRole;
+import app.repository.AssistantDoctorRepository;
 import app.repository.DoctorRepository;
+import app.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -19,6 +25,9 @@ import java.util.stream.Collectors;
 public class DoctorService {
 
     private final DoctorRepository doctorRepo;
+    private final UserRepository userRepo;
+    private final AssistantDoctorRepository assistantDoctorRepo;
+
 
     public List<DoctorListViewDTO> getAllDoctors() {
         return doctorRepo.findAll().stream()
@@ -89,6 +98,45 @@ public class DoctorService {
         Doctor doctor = getCurrentDoctor();
         doctor.setSpecialty(specialtyEnum.getEnglishName());
         doctorRepo.save(doctor);
+    }
+
+    public List<AssistantListItemDTO> getAllAssistants() {
+        return userRepo.findAll().stream()
+                .filter(u -> u.getRole() == UserRole.ASSISTANT)
+                .filter(u -> "ACTIVE".equalsIgnoreCase(u.getStatus()))
+                .map(u -> {
+                    AssistantListItemDTO dto = new AssistantListItemDTO();
+                    dto.setId(u.getId());
+                    dto.setFirstName(u.getFirstName());
+                    dto.setLastName(u.getLastName());
+                    dto.setEmail(u.getEmail());
+                    dto.setRole(u.getRole().name());
+                    dto.setStatus(u.getStatus());
+                    return dto;
+                })
+                .toList();
+    }
+
+    public void updateMyAssistant(UUID assistantId) {
+        Doctor doctor = getCurrentDoctor();
+
+        assistantDoctorRepo.deleteByDoctorId(doctor.getId());
+
+        if (assistantId == null) {
+            return;
+        }
+
+        User assistant = userRepo.findById(assistantId)
+                .orElseThrow(() -> new RuntimeException("Assistant not found"));
+
+        if (assistant.getRole() != UserRole.ASSISTANT) {
+            throw new RuntimeException("User is not an assistant");
+        }
+
+        AssistantDoctor mapping = new AssistantDoctor();
+        mapping.setAssistant(assistant);
+        mapping.setDoctor(doctor);
+        assistantDoctorRepo.save(mapping);
     }
 }
 

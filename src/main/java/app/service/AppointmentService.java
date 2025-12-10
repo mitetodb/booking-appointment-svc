@@ -14,6 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,6 +34,14 @@ public class AppointmentService {
                 .getAuthentication().getName();
         return userRepo.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    // logged in doctor
+    private Doctor getCurrentDoctor() {
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication().getName();
+        return doctorRepo.findByUserEmail(email)
+                .orElseThrow(() -> new RuntimeException("Doctor not found"));
     }
 
     // --- Validate 20min slots ---
@@ -174,6 +183,71 @@ public class AppointmentService {
             dto.setStatus(a.getStatus());
             return dto;
         }).toList();
+    }
+
+    // validate conflicts при update – игнорира текущия appointment
+    private void validateExistingConflictsForUpdate(Doctor doc, LocalDateTime time, UUID appointmentId) {
+        List<Appointment> all = appointmentRepo.findByDoctorId(doc.getId());
+        boolean conflict = all.stream()
+                .filter(a -> !a.getId().equals(appointmentId))
+                .anyMatch(a ->
+                        a.getDateTime().truncatedTo(MINUTES)
+                                .equals(time.truncatedTo(MINUTES))
+                );
+        if (conflict) {
+            throw new RuntimeException("Doctor already has appointment at this time.");
+        }
+    }
+
+    // doctor updates his own appointment
+    public AppointmentViewDTO editDoctorAppointment(UUID appointmentId, CreateAppointmentRequest req) {
+        Doctor doctor = getCurrentDoctor();
+
+        Appointment a = appointmentRepo.findById(appointmentId)
+                .orElseThrow(() -> new RuntimeException("Appointment not found"));
+
+        if (!a.getDoctor().getId().equals(doctor.getId())) {
+            throw new RuntimeException("Not allowed to modify this appointment");
+        }
+
+        // Формат: "yyyy-MM-dd HH:mm:ss.SSSSSS"
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
+        LocalDateTime time = LocalDateTime.parse(req.getDateTime(), formatter);
+
+        validateSlot(time);
+        validateDoctorAvailability(doctor, time);
+        validateExistingConflictsForUpdate(doctor, time, appointmentId);
+
+        a.setDateTime(time);
+        a.setType(req.getType());
+        a.setPaymentType(req.getPaymentType());
+        appointmentRepo.save(a);
+
+        AppointmentViewDTO dto = new AppointmentViewDTO();
+        dto.setId(a.getId());
+        dto.setDoctorId(doctor.getId().toString());
+        dto.setDoctorName(doctor.getUser().getFirstName() + " " + doctor.getUser().getLastName());
+        dto.setDateTime(a.getDateTime().toString());
+        dto.setType(a.getType());
+        dto.setPaymentType(a.getPaymentType());
+        dto.setStatus(a.getStatus());
+
+        return dto;
+    }
+
+    // doctor cancels his own appointment
+    public void doctorCancelAppointment(UUID appointmentId) {
+        Doctor doctor = getCurrentDoctor();
+
+        Appointment a = appointmentRepo.findById(appointmentId)
+                .orElseThrow(() -> new RuntimeException("Appointment not found"));
+
+        if (!a.getDoctor().getId().equals(doctor.getId())) {
+            throw new RuntimeException("You cannot cancel someone else's appointment.");
+        }
+
+        a.setStatus("CANCELLED");
+        appointmentRepo.save(a);
     }
 }
 

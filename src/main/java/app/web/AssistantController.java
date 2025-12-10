@@ -2,8 +2,10 @@ package app.web;
 
 import app.model.dto.AssistantAppointmentDTO;
 import app.model.dto.AssistantDoctorListDTO;
+import app.model.dto.UserViewDTO;
 import app.service.AssistantService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -48,5 +50,10 @@ public class AssistantController {
     @DeleteMapping("/appointments/{id}")
     public void cancel(@PathVariable UUID id) {
         assistantService.cancelAppointment(id);
+    }
+
+    @GetMapping("/users")
+    public List<UserViewDTO> getPatientsForAssistant() {
+        return assistantService.getAllPatients();
     }
 }

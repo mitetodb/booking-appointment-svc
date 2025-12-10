@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface AssistantDoctorRepository extends JpaRepository<AssistantDoctor, UUID> {
     List<AssistantDoctor> findByAssistantId(UUID id);
+    List<AssistantDoctor> findByDoctorId(UUID doctorId);
+    void deleteByDoctorId(UUID doctorId);
 }
