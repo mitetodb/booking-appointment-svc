@@ -70,7 +70,7 @@ Backend uses `@RestControllerAdvice` with a unified JSON error format:
   "message": "Error message",
   "path": "/api/example"
 }
-
+```
 
 ---
 
